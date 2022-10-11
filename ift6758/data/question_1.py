@@ -2,6 +2,7 @@ import pandas as pd
 import requests
 import os
 import os.path as path
+import json
 
 def get_player_stats(year: int, player_type: str) -> pd.DataFrame:
     """
@@ -66,7 +67,7 @@ def jsonToSeperateFile(json: str, pathToFile: str, override: bool) -> bool:
         print(error)
         exit(0)
 
-def jsonToSingleFile(json: str, pathToFile) -> bool:
+def jsonToSingleFile(jsonGame: str, gameid:int, seasonDict:dict,pathToFile, override:bool, saveFile:bool):
     """
     Append the json string to a singular file to create a single file that contains all the game of a singular season. This
     is done to avoid opening multiple time files making the process slower down the line. The initial step of dowloading all the
@@ -77,6 +78,38 @@ def jsonToSingleFile(json: str, pathToFile) -> bool:
     pathToFile : string to indicate where to find or create the file
     override : True to replace the file if it exist, False to not replace the file and instead append to it.
     """
+    if saveFile:
+        if path.exists(pathToFile):
+            if override:
+                file = open(pathToFile, 'w', encoding='utf-8')
+                file.write(json.dumps(seasonDict))
+                file.close()
+                return
+        else:
+            file = open(pathToFile, 'w', encoding='utf-8')
+            file.write(json.dumps(seasonDict))
+            file.close()
+            return
+    else:
+        if seasonDict == None:
+            if path.exists(pathToFile):
+                file = open(pathToFile, 'r', encoding='utf-8')
+                jsonStr = file.read()
+                seasonDict = json.loads(jsonStr)
+                file.close()
+            else:
+                seasonDict = {}
+        if not gameid in seasonDict: #if the key isnt inside the dict we add the json to it
+            seasonDict[gameid] = json.loads(jsonGame)
+        elif override:
+            seasonDict[gameid] = json.loads(jsonGame)
+        return seasonDict
+
+
+
+
+
+
     pass
 
 def dowload_play_by_play_for_game_id(gameid: int) -> [str,int]:
@@ -122,12 +155,15 @@ def dowload_games_for_season(year: int, pathToDirectory, override: bool):
         #Define variable for the bestOf
         bestOfInPlayoff = 7
 
-        checkForDirectoryExistence(pathToDirectory+f'/Season{year}{year+1}'+f'/Regular{year}{year+1}')
-        checkForDirectoryExistence(pathToDirectory + f'/Season{year}{year + 1}' + f'/Playoff{year}{year + 1}')
+        #These two could be combine with time
+        checkForDirectoryExistence(pathToDirectory+f'/Season{year}{year+1}'+f'/Regular{year}{year+1}') #build the directory path for regular season
+        checkForDirectoryExistence(pathToDirectory + f'/Season{year}{year + 1}' + f'/Playoff{year}{year + 1}')#build the directory path for playoff season
+
+        seasonDict = None
 
         #Get all the games for the regular season
         print(f'Regular season{year}-{year+1} :')
-        while(False):#nbOfMiss < thresholdOfMiss):
+        while(nbOfMiss < thresholdOfMiss):
             print(f'--GAMEID {gameid}')
 
             #Builds the path to file usin the gameID as the name and adding a sub directory for regular season
@@ -135,21 +171,21 @@ def dowload_games_for_season(year: int, pathToDirectory, override: bool):
             print(f'--Data will be saved at {pathToFile}')
 
             play_by_play, status_code = dowload_play_by_play_for_game_id(gameid)
-            #DataValid = wasGameDataFound(play_by_play)
             if status_code == 200:
                 jsonToSeperateFile(play_by_play, pathToFile, override)
+                seasonDict = jsonToSingleFile(play_by_play, gameid, seasonDict, pathToDirectory+f'/Season{year}{year+1}/season{year}{year+1}.json', override, False)
                 nbOfMiss = 0
             else:
                 nbOfMiss += 1
             gameid += 1
 
         #Get all the games for the playoffs
-        nbOfMiss = 0
         nbOfMatchup = 0
         wasLastRound = False
         gameid = build_game_id(year, False)
         print(f'Playoff season{year}-{year + 1} :')
         while True:
+            nbOfMiss = 0
             for game in range(bestOfInPlayoff):
                 print(f'--GAMEID {gameid}')
 
@@ -158,9 +194,9 @@ def dowload_games_for_season(year: int, pathToDirectory, override: bool):
                 print(f'--Data will be saved at {pathToFile}')
 
                 play_by_play, status_code = dowload_play_by_play_for_game_id(gameid)
-                #DataValid = wasGameDataFound(play_by_play)
                 if status_code == 200:
                     jsonToSeperateFile(play_by_play, pathToFile, override)
+                    seasonDict = jsonToSingleFile(play_by_play, gameid, seasonDict, pathToDirectory + f'/Season{year}{year+1}/season{year}{year+1}.json', override, False)
                     wasLastRound = False
                 else:
                     nbOfMiss += 1
@@ -170,13 +206,19 @@ def dowload_games_for_season(year: int, pathToDirectory, override: bool):
             if nbOfMiss == bestOfInPlayoff:
                 gameid = gameid + 100 - nbOfMatchup*10 - bestOfInPlayoff #reset gameid for next round
                 wasLastRound = True #tell that the last check didnt yield any information
+                nbOfMatchup = 0
             else:
                 gameid = gameid + 10 - bestOfInPlayoff #reset gameid for next matchup
                 nbOfMatchup += 1
-
+        jsonToSingleFile('', '', seasonDict, pathToDirectory + f'/Season{year}{year+1}/season{year}{year+1}.json', override, True)
     except Exception as error:
         print(error)
     pass
+
+def dataPipeline(pathToDirectory:str, yearsToFetch:list, override:bool):
+    for year in yearsToFetch:
+        dowload_games_for_season(year, pathToDirectory, override)
+    return
 
 """
 The first 4 digits identify the season of the game (ie. 2017 for the 2017-2018 season). The next 2 digits give the type of game,
@@ -199,10 +241,6 @@ def build_game_id(year: int, forRegularSeason: bool) -> int:
     if not forRegularSeason :
         return int((f'{year}{playoffsSeason}{playoffsFirstGame}'))
 
-def wasGameDataFound(json) -> bool:
-    badMessage = "\"message\" : \"Game data couldn't be found\""
-    return not badMessage in json
-
 def checkForDirectoryExistence(pathToDirectory):
     try:
         if path.exists(pathToDirectory) :
@@ -216,15 +254,6 @@ def checkForDirectoryExistence(pathToDirectory):
         print(error)
         exit(0)
 
-def getNextGameId(gameid:int, nbOfMiss:int) -> int:
-    bestOfPlayoff = 7 #Represent best of 7, for best of 3 change value for 3
-    sGameid = str(gameid) #gameid is of length 8
-    nbOfGame = int(sGameid[-1])
-    matchup = int(sGameid[-2])
-    round = int(sGameid[-3])
-
-
-
     pass
-#jsonToSeperateFile(dowload_play_by_play_for_game_id(2017020001,None,None),'./jsontest.json', True)
-dowload_games_for_season(2017,'./hockey',False)
+
+dataPipeline('./hockey',[2017,2018,2019,2020,2021],False)
