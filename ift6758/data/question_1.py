@@ -256,4 +256,4 @@ def checkForDirectoryExistence(pathToDirectory):
 
     pass
 
-dataPipeline('./hockey',[2017,2018,2019,2020,2021],False)
+#dataPipeline('./hockey',[2017],False)
