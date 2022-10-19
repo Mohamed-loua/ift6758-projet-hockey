@@ -4,6 +4,9 @@ import os
 import os as path
 import json
 import requests
+import warnings
+
+warnings.filterwarnings("ignore")
 
 class DataExtractor():
     def __init__(self):
@@ -34,6 +37,9 @@ class DataExtractor():
         play_data = live_data['plays']
         all_plays_data = np.array(play_data['allPlays'])
 
+        #Is empty when a playoff game wasnt played
+        if len(all_plays_data) == 0:
+            return {}
         def create_mask(play):
             return True if play['result']['eventTypeId'] == shot_ID or play['result']['eventTypeId'] == goal_ID else False
 
@@ -44,9 +50,12 @@ class DataExtractor():
     
     
     def create_panda_dataframe(self, np_array_data) -> pd.DataFrame:
+        if len(np_array_data) == 0:
+            return None
         df = pd.DataFrame(columns = self.__generate_dataframe_column_names())
         for play_data in np_array_data:
             df = self.__add_play_data_to_dataframe(df, play_data)
+        df.reset_index(drop=True, inplace=True)
         return df
     
     
@@ -67,7 +76,16 @@ class DataExtractor():
         play = game['liveData']['plays']['allPlays'][ID]
         return play
     
-    
+    def get_season_into_dataframe(self, path_to_file: str) -> pd.DataFrame:
+        #Get the file that contains all the play of a seasons
+        all_games_in_season = self.get_game_data(path_to_file)
+        df_season = pd.DataFrame()
+        for game in all_games_in_season:
+            print(game)
+            clean_game = self.clean_json(all_games_in_season.get(game))
+            df_game = self.create_panda_dataframe(clean_game)
+            df_season = df_season.append(df_game)
+        return df_season
     #get the playoffs games
     def get_game3(self, year: int, type: int, round: int, matchup: int, games: int, entire_season: dict) -> dict :
         game_ID = year*10**6 + 3*10**4 + round*100 + matchup*10 + games
