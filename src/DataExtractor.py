@@ -10,6 +10,37 @@ class DataExtractor():
         pass
     
     
+    def get_season_data_for_team(self, year: int, team_id: int) -> dict:
+        season_data = self.get_season_data(year)
+        
+        team_dict = {}
+        for game_id in season_data:
+        # print(season_data[game_id].keys())
+            team_1 = season_data[game_id]['gameData']['teams']['away']['id']
+            team_2 = season_data[game_id]['gameData']['teams']['home']['id']
+            
+            if team_1 == team_id: # could be regrouped
+                team_dict[game_id] = season_data[game_id]
+                continue
+            elif team_2 == team_id:
+                team_dict[game_id] = season_data[game_id]
+                continue
+        return team_dict
+    
+    
+    # get all shots of one specific team 
+    def get_shots(self, data: dict, team_id: int) -> np.array:
+        shots = []
+        for game_id in data:
+            for j in data[game_id]['liveData']['plays']['allPlays']:
+                if j['result']['event'] == "Shot":
+                    if j['team']['id'] == team_id:
+                        if j['coordinates']['x'] is not None:
+                            x = j['coordinates']['x']
+                            y = j['coordinates']['y']
+                            shots.append([x,y])
+        return np.array(shots)
+    
     #function that takes the season to be downloaded and returns a dictionary containing the entirety of the games played during
     def get_season_data(self, year: int) -> dict:
         with open(f"../notebooks/hockey/Season{year}{year+1}/season{year}{year+1}.json", 'r') as j:
