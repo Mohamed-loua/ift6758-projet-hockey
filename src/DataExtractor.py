@@ -10,7 +10,15 @@ class DataExtractor():
         pass
     
     
-    def get_game(self, path_to_file) -> dict:
+    #function that takes the season to be downloaded and returns a dictionary containing the entirety of the games played during
+    def get_season_data(self, year: int) -> dict:
+        with open(f"../notebooks/hockey/Season{year}{year+1}/season{year}{year+1}.json", 'r') as j:
+            entire_season = json.loads(j.read())
+        return entire_season
+    
+    
+    #Creation of game ID in order to find it in the dictionary
+    def get_game_data(self, path_to_file) -> dict:
         file = open(path_to_file, 'r', encoding='utf-8')
         json_str = file.read()
         season_dict = json.loads(json_str)
@@ -40,6 +48,30 @@ class DataExtractor():
         for play_data in np_array_data:
             df = self.__add_play_data_to_dataframe(df, play_data)
         return df
+    
+    
+    #Creation of game ID in order to find it in the dictionary
+    def build_game_ID(self, game_ID: int, year: int, season_type: int) -> str:
+        ID = str(year) + str(season_type).zfill(2) + str(game_ID).zfill(4)
+        return ID
+    
+    
+    #gets the game by looking up its ID in the dictionary which contains all the required data
+    def get_game_from_dict(self, year: int, game: int,  season_type: int, entire_season: dict) -> dict :
+        ID = self.build_game_ID(game, year, season_type)
+        return entire_season[str(ID)]
+    
+    
+    # gets the specified play (ID) for the game passed as a dictionary
+    def get_play_by_ID(self, game : dict, ID : int) -> dict:
+        play = game['liveData']['plays']['allPlays'][ID]
+        return play
+    
+    
+    #get the playoffs games
+    def get_game3(self, year: int, type: int, round: int, matchup: int, games: int, entire_season: dict) -> dict :
+        game_ID = year*10**6 + 3*10**4 + round*100 + matchup*10 + games
+        return entire_season[str(game_ID)]
 
 
     def __generate_dataframe_column_names(self)-> list:
