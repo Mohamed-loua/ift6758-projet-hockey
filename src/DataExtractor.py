@@ -14,7 +14,7 @@ class DataExtractor():
     
     
     def get_season_data_for_team(self, year: int, team_id: int) -> dict:
-        season_data = self.get_season_data(year)
+        season_data = self.__get_season_data(year)
         
         team_dict = {}
         for game_id in season_data:
@@ -31,28 +31,75 @@ class DataExtractor():
         return team_dict
     
     
-    # get all shots of one specific team 
-    def get_shots(self, data: dict, team_id: int) -> np.array:
-        shots = []
-        for game_id in data:
-            for j in data[game_id]['liveData']['plays']['allPlays']:
-                if j['result']['event'] == "Shot":
-                    if j['team']['id'] == team_id:
-                        if j['coordinates']['x'] is not None:
-                            x = j['coordinates']['x']
-                            y = j['coordinates']['y']
-                            shots.append([x,y])
-        return np.array(shots)
-    
     #function that takes the season to be downloaded and returns a dictionary containing the entirety of the games played during
-    def get_season_data(self, year: int) -> dict:
+    def __get_season_data(self, year: int) -> dict:
         with open(f"../notebooks/hockey/Season{year}{year+1}/season{year}{year+1}.json", 'r') as j:
             entire_season = json.loads(j.read())
         return entire_season
     
     
+    # get all shots of one specific team 
+    def get_shots(self, data: dict, team_id: int) -> np.array:
+        shots = []
+        for game_id in data:
+            for play in data[game_id]['liveData']['plays']['allPlays']:
+                try:
+                    if play['result']['event'] == "Shot":
+                        if play['team']['id'] == team_id:
+                            if play['coordinates']['x'] is not None:
+                                x = play['coordinates']['x']
+                                y = play['coordinates']['y']
+                                shots.append([x,y])
+                except Exception as e:
+                    print(e)
+        return np.array(shots)
+    
+    
+    # get total time played of one specific team 
+    def get_time_played_from_team_season_data(self, data: dict) -> np.array:
+        time_played = []
+        for game_id in data:
+            time_played.append(60)
+        return np.array(time_played)
+    
+    
     #Creation of game ID in order to find it in the dictionary
-    def get_game_data(self, path_to_file) -> dict:
+    def build_game_ID(self, game_ID: int, year: int, season_type: int) -> str:
+        ID = str(year) + str(season_type).zfill(2) + str(game_ID).zfill(4)
+        return ID
+    
+    
+    #gets the game by looking up its ID in the dictionary which contains all the required data
+    def get_game_from_dict(self, year: int, game: int,  season_type: int, entire_season: dict) -> dict :
+        ID = self.build_game_ID(game, year, season_type)
+        return entire_season[str(ID)]
+    
+    
+    #get the playoffs games
+    def get_game3(self, year: int, type: int, round: int, matchup: int, games: int, entire_season: dict) -> dict :
+        game_ID = year*10**6 + 3*10**4 + round*100 + matchup*10 + games
+        return entire_season[str(game_ID)]
+    
+    
+    # gets the specified play (ID) for the game passed as a dictionary
+    def get_play_by_ID(self, game : dict, ID : int) -> dict:
+        play = game['liveData']['plays']['allPlays'][ID]
+        return play
+    
+    
+    def get_season_into_dataframe(self, path_to_file: str) -> pd.DataFrame:
+        #Get the file that contains all the play of a seasons
+        all_games_in_season = self.__get_game_data(path_to_file)
+        df_season = pd.DataFrame()
+        for game in all_games_in_season:
+            print(game)
+            clean_game = self.__clean_json(all_games_in_season.get(game))
+            df_game = self.__create_panda_dataframe(clean_game)
+            df_season = df_season.append(df_game)
+        return df_season
+    
+    
+    def __get_game_data(self, path_to_file) -> dict:
         file = open(path_to_file, 'r', encoding='utf-8')
         json_str = file.read()
         season_dict = json.loads(json_str)
@@ -60,7 +107,7 @@ class DataExtractor():
         return season_dict
 
 
-    def clean_json(self, json_dict: dict) -> dict:
+    def __clean_json(self, json_dict: dict) -> dict:
         live_data = json_dict["liveData"]
         shot_ID = 'SHOT'
         goal_ID = 'GOAL'
@@ -78,9 +125,9 @@ class DataExtractor():
         mask = vf(all_plays_data)
 
         return all_plays_data[mask]
+
     
-    
-    def create_panda_dataframe(self, np_array_data) -> pd.DataFrame:
+    def __create_panda_dataframe(self, np_array_data) -> pd.DataFrame:
         if len(np_array_data) == 0:
             return None
         df = pd.DataFrame(columns = self.__generate_dataframe_column_names())
@@ -89,39 +136,6 @@ class DataExtractor():
         df.reset_index(drop=True, inplace=True)
         return df
     
-    
-    #Creation of game ID in order to find it in the dictionary
-    def build_game_ID(self, game_ID: int, year: int, season_type: int) -> str:
-        ID = str(year) + str(season_type).zfill(2) + str(game_ID).zfill(4)
-        return ID
-    
-    
-    #gets the game by looking up its ID in the dictionary which contains all the required data
-    def get_game_from_dict(self, year: int, game: int,  season_type: int, entire_season: dict) -> dict :
-        ID = self.build_game_ID(game, year, season_type)
-        return entire_season[str(ID)]
-    
-    
-    # gets the specified play (ID) for the game passed as a dictionary
-    def get_play_by_ID(self, game : dict, ID : int) -> dict:
-        play = game['liveData']['plays']['allPlays'][ID]
-        return play
-    
-    def get_season_into_dataframe(self, path_to_file: str) -> pd.DataFrame:
-        #Get the file that contains all the play of a seasons
-        all_games_in_season = self.get_game_data(path_to_file)
-        df_season = pd.DataFrame()
-        for game in all_games_in_season:
-            print(game)
-            clean_game = self.clean_json(all_games_in_season.get(game))
-            df_game = self.create_panda_dataframe(clean_game)
-            df_season = df_season.append(df_game)
-        return df_season
-    #get the playoffs games
-    def get_game3(self, year: int, type: int, round: int, matchup: int, games: int, entire_season: dict) -> dict :
-        game_ID = year*10**6 + 3*10**4 + round*100 + matchup*10 + games
-        return entire_season[str(game_ID)]
-
 
     def __generate_dataframe_column_names(self)-> list:
         return ['about.periodTime', 'about.eventId', 'team.name', 'result.eventTypeId', 'coordinates.x', 'coordinates.y', 'players.0.player.fullName', 'players.1.player.fullName', 'result.secondaryType', 'result.strength.code', 'result.emptyNet']
