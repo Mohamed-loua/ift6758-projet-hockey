@@ -55,6 +55,17 @@ class StatsApiProxy:
         
         
     def __data_pipeline(self, years_to_fetch: list, path_to_directory: str, override: bool):
+        """
+        Allows one to dowload multiple season be entering a list which contains all the years that is needed to be dowloaded. This will call __dowload_games_for_season.
+
+        Args:
+            years_to_fetch: A list contains every year we wish to dowload
+            path_to_directory: The path where all the files will be dowloaded
+            override: If we wish to recreate new files if they already exist (make a new api call if override = True)
+
+        Returns: None
+
+        """
         if path.exists(path_to_directory):
             print('File already exists, no download required!')
         else:
@@ -66,13 +77,19 @@ class StatsApiProxy:
     
     def __download_games_for_season(self, year: int, path_to_directory: str, override: bool):
         """
+        Dowload all the games of a season to be save in a file structure that allows the easily find a game we want of fetch all the game of a season.
+        This will create the following structure :
+        /path/to/directory/Season<year><year+1>/Regular
+                                                Playoff
+                                                season<year><year+1>.json
+        The regular and Playoff directory will each contains a multitude of files where the name of the file is its own gameid and the content of the file
+        is the response from the api (unless it returned a 404). The season<year><year+1>.json is a singular file that contains all the games from one season.
+        It's structure is a dictionary where the key is the gameid and the value the response from the api.
 
-        The first 4 digits identify the season of the game (ie. 2017 for the 2017-2018 season). The next 2 digits give the type of game,
-         where 01 = preseason, 02 = regular season, 03 = playoffs, 04 = all-star. The final 4 digits identify the specific game number. 
-         For regular season and preseason games, this ranges from 0001 to the number of games played. 
-         (1271 for seasons with 31 teams (2017 and onwards) and 1230 for seasons with 30 teams). 
-         For playoff games, the 2nd digit of the specific number gives the round of the playoffs, the 3rd digit specifies the matchup, 
-         and the 4th digit specifies the game (out of 7).
+        Args:
+            year: The season to be dowloaded
+            path_to_directory: Path where the files will be saved
+            override: If one will like to override the file in the directory.
         """
 
         try:
@@ -154,13 +171,12 @@ class StatsApiProxy:
 
     def __build_game_id(self, year: int, for_regular_season: bool) -> int:
         """
+            Build the game id of the first game in regular season or playoff season
 
-        The first 4 digits identify the season of the game (ie. 2017 for the 2017-2018 season). The next 2 digits give the type of game,
-         where 01 = preseason, 02 = regular season, 03 = playoffs, 04 = all-star. The final 4 digits identify the specific game number. 
-         For regular season and preseason games, this ranges from 0001 to the number of games played. 
-         (1271 for seasons with 31 teams (2017 and onwards) and 1230 for seasons with 30 teams). 
-         For playoff games, the 2nd digit of the specific number gives the round of the playoffs, the 3rd digit specifies the matchup, 
-         and the 4th digit specifies the game (out of 7).
+            year : Year of the season
+            for_regular_season : True is we want the first gameid of the regular season, false otherwise
+
+            returns the first gameid of the regular season or the playoff season.
         """
 
         regularSeason = '02'
@@ -177,6 +193,15 @@ class StatsApiProxy:
 
 
     def __check_for_directory_existence(self, path_to_directory):
+        """
+        Check to see if the structure of directory to which we wish to save the file exist. If they do not exist, they will be created. If an error is rise,
+        the application will stop running. This method is usually one of the first that is run in the pipeline to avoid problems. It is only ran once.
+        Args:
+            path_to_directory: path to where the files will be saved
+
+        Returns:
+
+        """
         try:
             if path.exists(path_to_directory) :
                 print('Path to directory is valid')
@@ -194,7 +219,7 @@ class StatsApiProxy:
     def __json_to_separate_file(self, json: str, path_to_file: str, override: bool) -> bool:
         """
 
-        Create a file a the location mention and write the json inside of it. The method will allow override of file if allowed.
+        Create a file at the location mention and write the json inside of it. The method will allow override of file if allowed.
         Args:
             json: json string of the data to be saved in a file
             path_to_file: path where the file will be created
@@ -223,12 +248,15 @@ class StatsApiProxy:
 
         Append the json string to a singular file to create a single file that contains all the game of a singular season. This
         is done to avoid opening multiple time files making the process slower down the line. The initial step of dowloading all the
-        might be slower but once the data is dowloaded, it will be easier to simply open a singular file and associate the content to
-        a dictionnary rather then opening and closing multiple file to construct a dictonnary with all the data.
+        game might be slower but once the data is dowloaded, it will be easier to simply open a singular file and associate the content to
+        a dictionary rather than opening and closing multiple file to construct a dictonary with all the data.
 
         json : a string in the form of a json to be added to the file
+        game_id : Game id of the game we wish to add to the dictionary
+        season_dict : Dictionary that holds all the games for a season
         path_to_file : string to indicate where to find or create the file
         override : True to replace the file if it exist, False to not replace the file and instead append to it.
+        save_file : True to save the file at the specify location, False means we are still addind data to the structure before saving it the file
         """
 
         if save_file:
@@ -263,12 +291,13 @@ class StatsApiProxy:
         """
 
         The method will fetch a html page at the follwing url https://statsapi.web.nhl.com/api/v1/game/{game_id}/feed/live/ which contains
-        all the information about a hockey game.
+        all the information about a hockey game in the format of a json structure. If the call to the api doesn't return a 200, the method will return an empty string
+        with the code 404
 
         Args:
             game_id: The game id to be fetched
 
-        Returns: A json string which contains information about a specific Hockey game
+        Returns: A json string which contains information about a specific Hockey game base on the game id
 
         """
         try:
