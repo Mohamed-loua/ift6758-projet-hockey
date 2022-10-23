@@ -104,3 +104,6 @@ class DataVisualization():
 
                 except KeyError as e:
                     print('No such game')
+                    
+    
+    def 

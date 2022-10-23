@@ -103,8 +103,6 @@ class DataExtractor():
         
         for game in all_games_in_season:
             game_pk, clean_game = self.__clean_json(all_games_in_season.get(game))
-            # result = self.__clean_json(all_games_in_season.get(game))
-            # print(result)
             df_game = self.__create_panda_dataframe_for_one_game(game_pk, clean_game)
             df_season = df_season.append(df_game)
             df_season.reset_index(drop=True, inplace=True)
@@ -123,7 +121,7 @@ class DataExtractor():
         df = df.loc[:, ['coordinatesX', 'coordinatesY']]
         
         df = df.dropna()
-        return np.array(df)
+        return np.array(df['coordinatesX']), np.array(df['coordinatesY'])
     
     
     # get total time played of one specific team 
