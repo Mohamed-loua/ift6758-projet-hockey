@@ -10,7 +10,7 @@ warnings.filterwarnings("ignore")
 
 class DataExtractor():
     def __init__(self):
-        pass
+        self.all_games_in_season = None # save the dictionary to access more informations later
     
     
     def get_season_data_for_team(self, year: int, team_id: int) -> dict:
@@ -80,12 +80,12 @@ class DataExtractor():
         return all_plays_data[mask]
     
     
-    def create_panda_dataframe(self, np_array_data) -> pd.DataFrame:
+    def create_panda_dataframe(self, np_array_data, game) -> pd.DataFrame:
         if len(np_array_data) == 0:
             return None
         df = pd.DataFrame(columns = self.__generate_dataframe_column_names())
         for play_data in np_array_data:
-            df = self.__add_play_data_to_dataframe(df, play_data)
+            df = self.__add_play_data_to_dataframe(df, play_data, game)
         df.reset_index(drop=True, inplace=True)
         return df
     
@@ -107,27 +107,76 @@ class DataExtractor():
         play = game['liveData']['plays']['allPlays'][ID]
         return play
     
+    def count(self,row):
+        if row['type_of_shot_id'] == 'SHOT':
+            return 0
+        else:
+            return 1
+    
+    def compute_distances(self,row):
+        left = np.array([-86,0])
+        right = np.array([86,0])
+        coord= np.array([row['coordinates.x'],row['coordinates.y']] )
+        if row['rinkSide'] == 'left':
+            return np.linalg.norm(coord - left)
+        else:
+            return np.linalg.norm(coord - right)
+        
+    #function to add informations used to compute the distance
+    def distance_helpers(self ,row) -> pd.DataFrame:
+        game = self.all_games_in_season.get(row['ID'])
+        game_period = game['liveData']['plays']['allPlays'][row['about.eventIdx']]['about']['period']
+        home = game['gameData']['teams']['home']['name']
+        away = game['gameData']['teams']['away']['name']
+        def away_or_home(row):
+            if row['team.name'] == home:
+                return 'home'
+            else:
+                return 'away'
+        def rink_side(row):
+            if game_period == 1 or game_period == 3 or game_period == 5:
+
+                if row['away_or_home'] == 'home':
+                    return 'right'
+                else:
+                    return 'left'
+            if game_period == 2 or game_period == 4:
+                if row['away_or_home']== 'home':
+                    return 'left'
+                else:
+                    return 'right'
+
+
+        row['away_or_home'] = away_or_home(row)
+        row['rinkSide'] = rink_side(row)
+        return row
+    
     def get_season_into_dataframe(self, path_to_file: str) -> pd.DataFrame:
         #Get the file that contains all the play of a seasons
-        all_games_in_season = self.get_game_data(path_to_file)
+        self.all_games_in_season = self.get_game_data(path_to_file)
+        
         df_season = pd.DataFrame()
-        for game in all_games_in_season:
+        for game in self.all_games_in_season:
             print(game)
-            clean_game = self.clean_json(all_games_in_season.get(game))
-            df_game = self.create_panda_dataframe(clean_game)
+            clean_game = self.clean_json(self.all_games_in_season.get(game))
+            df_game = self.create_panda_dataframe(clean_game,game)
             df_season = df_season.append(df_game)
+        df_season['about.eventIdx'] = df_season['about.eventIdx'].astype(str).astype(int)
+        df_season['coordinates.x'] = df_season['coordinates.x'].astype(str).astype(float)
+        df_season['coordinates.y'] = df_season['coordinates.y'].astype(str).astype(float)
         return df_season
     #get the playoffs games
     def get_game3(self, year: int, type: int, round: int, matchup: int, games: int, entire_season: dict) -> dict :
         game_ID = year*10**6 + 3*10**4 + round*100 + matchup*10 + games
         return entire_season[str(game_ID)]
 
-
+    #Added the column about.eventIdx
     def __generate_dataframe_column_names(self)-> list:
-        return ['about.periodTime', 'about.eventId', 'team.name', 'result.eventTypeId', 'coordinates.x', 'coordinates.y', 'players.0.player.fullName', 'players.1.player.fullName', 'result.secondaryType', 'result.strength.code', 'result.emptyNet']
+        return ['about.periodTime', 'about.eventId','about.eventIdx', 'team.name', 'result.eventTypeId', 'coordinates.x', 'coordinates.y', 'players.0.player.fullName', 'players.1.player.fullName', 'result.secondaryType', 'result.strength.code', 'result.emptyNet']
 
+    
 
-    def __add_play_data_to_dataframe(self, df: pd.DataFrame, play_data: dict) -> dict:
+    def __add_play_data_to_dataframe(self, df: pd.DataFrame, play_data: dict, game) -> dict:
         def extract_path_from_column_name(column_name: str) -> list:
             return column_name.split(".")
     
@@ -152,6 +201,9 @@ class DataExtractor():
             path = extract_path_from_column_name(column)
             value = extract_value_from_path(path, play_data)
             new_dict[column] = value
+        new_dict['ID'] = game # Added the game ID to each play to access informations easily
 
         new_row_df = pd.DataFrame([new_dict])
         return df.append(new_row_df, )
+    
+    
