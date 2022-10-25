@@ -85,17 +85,8 @@ class DataExtractor():
     def get_play_by_ID(self, game : dict, ID : int) -> dict:
         play = game['liveData']['plays']['allPlays'][ID]
         return play
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+
+
     #Get the file that contains all the play of a season
     def get_season_into_dataframe(self, path_to_file: str) -> pd.DataFrame:
         all_games_in_season = self.__get_game_data(path_to_file)
@@ -170,8 +161,7 @@ class DataExtractor():
 
         return game_pk, all_plays_data[mask]
 
-    
-    
+
     def create_panda_dataframe(self, np_array_data, game) -> pd.DataFrame:
         if len(np_array_data) == 0:
             return None
@@ -266,8 +256,6 @@ class DataExtractor():
     def __generate_dataframe_column_names(self)-> list:
         return ['about.periodTime', 'about.eventId','about.eventIdx', 'team.name', 'result.eventTypeId', 'coordinates.x', 'coordinates.y', 'players.0.player.fullName', 'players.1.player.fullName', 'result.secondaryType', 'result.strength.code', 'result.emptyNet']
 
-    
-
     def __add_play_data_to_dataframe(self, df: pd.DataFrame, play_data: dict, game) -> dict:
         def extract_path_from_column_name(column_name: str) -> list:
             return column_name.split(".")
@@ -297,5 +285,71 @@ class DataExtractor():
 
         new_row_df = pd.DataFrame([new_dict])
         return df.append(new_row_df, )
-    
-    
+
+    def __create_panda_dataframe_for_one_game(self, game_pk: str, all_play_data: dict) -> pd.DataFrame:
+        if len(all_play_data) == 0:
+            return None
+        rows_dict = []
+
+        for play_data in all_play_data:
+            rows_dict.append(self.__extract_play_data_from_dict(game_pk, play_data))
+
+        df = pd.DataFrame(rows_dict)
+        return df
+
+    def __extract_play_data_from_dict(self, game_pk: str, full_play_data: dict) -> dict:
+        def extract_path_from_column_name(column_name: str) -> list:
+            return column_name.split(".")
+
+        def extract_value_from_path(path: list, full_play_data: dict):
+            result = full_play_data
+            for i in range(len(path)):
+                try:
+                    if path[i] == str(0):
+                        result = result[0]
+                    elif path[i] == str(1):
+                        result = result[len(result) - 1]
+                    else:
+                        result = result[path[i]]
+                except:
+                    return None
+            return result
+
+        new_dict = {}
+
+        for column in self.__generate_dataframe_column_names():
+            path = extract_path_from_column_name(column)
+            value = extract_value_from_path(path, full_play_data)
+            new_dict[column] = value
+        new_dict['gamePk'] = game_pk
+        return new_dict
+
+    # get all shots of one specific team
+    def get_team_shots_from_dataframe(self, df: pd.DataFrame, team_id: int) -> np.array:
+        df.rename(columns={
+            'team.id': 'teamID',
+            'coordinates.x': 'coordinatesX',
+            'coordinates.y': 'coordinatesY'
+        }, inplace=True)
+
+        df = df[df.teamID == team_id]
+        df = df.loc[:, ['coordinatesX', 'coordinatesY']]
+
+        df = df.dropna()
+        return np.array(df['coordinatesX']), np.array(df['coordinatesY'])
+
+    # get total time played of one specific team
+    def get_time_played_from_team_season_dataframe(self, df: pd.DataFrame, team_id: int) -> np.array:
+        time_played = []
+        df.rename(columns={
+            'team.id': 'teamID',
+            'coordinates.x': 'coordinatesX',
+            'coordinates.y': 'coordinatesY'
+        }, inplace=True)
+
+        df = df[df.teamID == team_id]
+        count_season_games = df['gamePk'].nunique()
+
+        for i in range(count_season_games):
+            time_played.append(60)
+        return np.array(time_played)
